@@ -4,7 +4,7 @@ package WebService::GoogleMaps;
 # a perl interface to google maps
 # Copyright (c) 2005 - Karl Lohner    <karllohner+googlemaps@gmail.com>
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 use warnings;
 use strict;
@@ -13,6 +13,10 @@ use LWP::UserAgent;
 use HTTP::Request;
 # use HTTP::Cookies;
 use POSIX qw/floor ceil/;
+
+use constant GOOGLEMAPS_TILE_URL => 'http://mt.google.com/mt?v=%s&x=%d&y=%d&zoom=%d';
+use constant GOOGLEMAPS_TILE_RES_X => 128;
+use constant GOOGLEMAPS_TILE_RES_Y => 128;
 
 sub new {
     my $class = shift;
@@ -27,18 +31,17 @@ sub new {
 
     $self->{debug} && print STDERR "In new()\n";
 
-    $self->{agent} ||= "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.7.5) Gecko/20041106 Firefox/1.0";  # fake as FireFox 1.0
-    $self->{error} = '';
     $self->{debug} && print STDERR "Setting user-agent to [$opts{agent}]\n";
-    $self->{ua} = LWP::UserAgent->new();
-    $self->{ua}->agent($self->{agent});
+    if (!$self->{ua}) {
+        $self->{ua} = LWP::UserAgent->new();
+        $self->{agent} ||= "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.7.5) Gecko/20041106 Firefox/1.0";  # fake as FireFox 1.0
+        $self->{ua}->agent($self->{agent});
+    }
 
     # $self->{debug} && print STDERR "Setting up cookie jar (HTTP\:\:Cookies)\n";
     # $self->{ua}->cookie_jar(HTTP::Cookies->new(%{$self->{cookies}}));
     
     $self->{gm_version} ||= ".1";
-    $self->{tile_res_x}    ||= 128;
-    $self->{tile_res_y}    ||= 128;
 
     $self->{debug} && print STDERR "new() complete\n";
     
@@ -50,7 +53,7 @@ sub get_tile_http {
 
     $self->{debug} && print STDERR "In get_tile_http($x, $y, $z), making request...\n";
     
-    my $req = HTTP::Request->new(GET => sprintf("http://mt.google.com/mt?v=%s&x=%d&y=%d&zoom=%d", $self->{gm_version}, $x, $y, $z));
+    my $req = HTTP::Request->new(GET => sprintf(GOOGLEMAPS_TILE_URL, $self->{gm_version}, $x, $y, $z));
     my $res = $self->{ua}->request($req);
     
     $self->{debug} && print STDERR "Got request\n";
@@ -60,7 +63,7 @@ sub get_tile_http {
         return $res->content;
     } else {
         $self->{debug} && print STDERR "Request failure error[".$res->status_line."]\n";
-        $self->{error} = $res->status_line;
+        $self->error($res->status_line);
     }
     
     return undef;
@@ -135,15 +138,37 @@ sub get {
     return undef;
 }
 
+sub error {
+    my $self = shift;
+    if( @_ ) {
+        $self->{ _ERROR } = shift;
+    }
+    return $self->{ _ERROR };
+}
+
+
+
 sub latlonzoom_to_gmap_xy_float {
     my $self = shift;
     # figure out which tile is at a given latitude and longitude for a specific zoom_level
-    return [ (($_[1] + 98.35) * (0x20000 >> $_[2])  * 0.77162458338772) / $self->{tile_res_x},
-             ((39.5 - $_[0])  * (0x20000 >> $_[2]))                     / $self->{tile_res_y} ];
+    return [ (($_[1] + 98.35) * (0x20000 >> $_[2])  * 0.77162458338772) / GOOGLEMAPS_TILE_RES_X,
+             ((39.5 - $_[0])  * (0x20000 >> $_[2]))                     / GOOGLEMAPS_TILE_RES_Y ];
 }
 
 sub generate_gd {
     my $self = shift;
+    
+    if (scalar @_ != 3) {
+        my %opts = @_;
+        foreach (keys %opts) {
+            $self->{$_}=$opts{$_};
+        }
+    } 
+    else {
+        $self->{latitude}   = $_[0];
+        $self->{longitude}  = $_[1];
+        $self->{zoom_level} = $_[2];
+    }
     my $latitude   = defined($_[0]) ? $_[0] : $self->{latitude};
     my $longitude  = defined($_[1]) ? $_[1] : $self->{longitude};
     my $zoom_level = defined($_[2]) ? $_[2] : $self->{zoom_level};
@@ -159,21 +184,21 @@ sub generate_gd {
     # figure out where this tile should go in our gd image
     my $gd_pan_offset = [ (defined($self->{pan_x}) ? $self->{pan_x} : 0), (defined($self->{pan_y}) ? $self->{pan_y} : 0) ];
 
-    my $gd_center_tile_xy = [ int( ( ($self->{width}  / 2) + $gd_pan_offset->[0] ) - 
-                                   ( ($gmap_center_tile_xy_float->[0] - $gmap_center_tile_xy->[0]) * $self->{tile_res_x} ) 
+    my $gd_center_tile_xy = [ int( ( ($self->{width}  / 2) - $gd_pan_offset->[0] ) - 
+                                   ( ($gmap_center_tile_xy_float->[0] - $gmap_center_tile_xy->[0]) * GOOGLEMAPS_TILE_RES_X ) 
                                  ),
-                              int( ( ($self->{height} / 2) + $gd_pan_offset->[1] ) - 
-                                   ( ($gmap_center_tile_xy_float->[1] - $gmap_center_tile_xy->[1]) * $self->{tile_res_y} )
+                              int( ( ($self->{height} / 2) - $gd_pan_offset->[1] ) - 
+                                   ( ($gmap_center_tile_xy_float->[1] - $gmap_center_tile_xy->[1]) * GOOGLEMAPS_TILE_RES_Y )
                                  ) ];
 
     # set up a hash to track some info about our current gd generation
     my $tile_hash = {};
     # We need to limit our tile requests to within a specific viewport of offset ranges.
     # As we process, we may need to further reduce this viewport if there isn't data on the server to get some tiles.
-    $tile_hash->{viewport}{0}{-1} = 0 - POSIX::ceil(($gd_center_tile_xy->[0] / $self->{tile_res_x}));
-    $tile_hash->{viewport}{0}{1}  =     POSIX::ceil((($self->{width}  - $gd_center_tile_xy->[0]) / $self->{tile_res_x})) - 1;
-    $tile_hash->{viewport}{1}{-1} = 0 - POSIX::ceil(($gd_center_tile_xy->[1] / $self->{tile_res_y}));
-    $tile_hash->{viewport}{1}{1}  =     POSIX::ceil((($self->{height} - $gd_center_tile_xy->[1]) / $self->{tile_res_y})) - 1;
+    $tile_hash->{viewport}{0}{-1} = 0 - POSIX::ceil(($gd_center_tile_xy->[0] / GOOGLEMAPS_TILE_RES_X));
+    $tile_hash->{viewport}{0}{1}  =     POSIX::ceil((($self->{width}  - $gd_center_tile_xy->[0]) / GOOGLEMAPS_TILE_RES_X)) - 1;
+    $tile_hash->{viewport}{1}{-1} = 0 - POSIX::ceil(($gd_center_tile_xy->[1] / GOOGLEMAPS_TILE_RES_Y));
+    $tile_hash->{viewport}{1}{1}  =     POSIX::ceil((($self->{height} - $gd_center_tile_xy->[1]) / GOOGLEMAPS_TILE_RES_Y)) - 1;
     
     # We need to set up a queue of tile offsets to fetch relative to our desired latitude/longitude.
     # This is also influenced by our panning
@@ -198,7 +223,7 @@ sub generate_gd {
         if ($gifdata) {
             # place it into our gd viewport
             my $mt = GD::Image->newFromGifData($gifdata);
-            $gd->copy($mt,$gd_center_tile_xy->[0] + ($tile_xy_offset->[0] * $self->{tile_res_x}), $gd_center_tile_xy->[1] + ($tile_xy_offset->[1] * $self->{tile_res_y}), 0, 0, $self->{tile_res_x}, $self->{tile_res_y});
+            $gd->copy($mt,$gd_center_tile_xy->[0] + ($tile_xy_offset->[0] * GOOGLEMAPS_TILE_RES_X), $gd_center_tile_xy->[1] + ($tile_xy_offset->[1] * GOOGLEMAPS_TILE_RES_Y), 0, 0, GOOGLEMAPS_TILE_RES_X, GOOGLEMAPS_TILE_RES_Y);
             # queue the top, bottom, left, right tiles if they're within our viewport and within available range
             foreach my $vector ([0,-1],[0,1],[-1,0],[1,0]) {
                 # make sure it's not already queued
@@ -212,7 +237,7 @@ sub generate_gd {
             my $from_vector = $tile_hash->{queued}{$tile_xy_offset->[0]}{$tile_xy_offset->[1]};
             # abort here if this happened on the first tile requested
             if (!$from_vector->[0] && !$from_vector->[1]) {
-                $self->{error} = "tile at center of image is not available";
+                $self->error("tile at center of image is not available");
                 last;
             }
             # reduce our allowed viewport if we've hit a image source boundary
@@ -253,68 +278,151 @@ __END__
 
 =head1 NAME
 
-WebService::GoogleMaps - Retrieves maps from Google Maps
-
-=head1 VERSION
-
-Version 0.03
-
-=cut
+WebService::GoogleMaps - Automated interface to Google Maps
 
 =head1 SYNOPSIS
 
-
     use WebService::GoogleMaps;
 
+    # Set up a new object with a viewport of 640 x 480 pixels
     my $gmap = WebService::GoogleMaps->new( 640, 480 );
 
+    # Specify a location to view
     $gmap->set(
         latitude   => 40.750275,
         longitude  => -73.993034,
-        zoom_level => 4,          # valid values are 0..12, lower value is more zoomed
-        cache_dir  => "/tmp",     # optional, but helps speed up future requests
-        pan_x      => 0,          # experimental this version
-        pan_y      => 0,          # experimental this version
+        zoom_level => 4,          # valid values are 0..13, lower value is more zoomed
+        cache_dir  => "/tmp",     # optional, but recommended!  Helps speed up future requests
+        pan_x      => 0,          # adjust center pixel of viewport east  (+) or west  (-)
+        pan_y      => 0,          # adjust center pixel of viewport north (+) or south (-)
     );
+
+    # create a GD object containing our bitmapped map object
     my $gd = $gmap->generate_gd();
 
     # or simply
+    # my $gd = $gmap->generate_gd(40.750275, -73.993034, 4);  # latitude, longitude, zoom_level
 
-    # my $gd2 = $gmap->generate_gd(40.43305, -74.49757, 4);  # latitude, longitude, zoom_level
-
-    $gmap->{error} && print "Error: $gmap->{error}\n";
+    my $error = $gmap->error();
+    $error && print "Error: $error\n";
     
-    open (FH, ">", "msg.png");
+    open (FH, ">", "mymap.png");
     binmode FH;
     print FH $gd->png;
     close(FH);
 
+=head1 DESCRIPTION
+
+WebService::GoogleMaps provides an automated interface to Google Maps
+L<http://maps.google.com/>, which provides free street maps of locations
+in the USA and Canada.  This module allows you to specify an image size,
+latitude, longitude, and zoom level and returns a GD object containing a
+street level map.
+
+=head1 METHODS
+
+=head2 new()
+
+The constructor. You can pass it an image width and height in pixels, or 
+nothing to let it default to 640 x 480 pixels.  Or instead, pass it a
+list of initial options and values.
+
+    # set up our object to create a 320 x 240 pixel image
+    my $gmap = WebService::GoogleMaps->new( 800, 600 );
+
+    # use the default 640 x 480 image size
+    my $gmap = WebService::GoogleMaps->new();
+
+    # specify several options and values
+    my $gmap = WebService::GoogleMaps->new(
+        width      => 800,
+        height     => 600,
+        latitude   => 40.750275,
+        longitude  => -73.993034,
+        zoom_level => 3,
+        cache_dir  => "/tmp",     # optional, but helps speed up future requests
+        pan_x      => 100,        # adjust center pixel of viewport 100 pixels east of longitude
+        pan_y      => 100,        # adjust center pixel of viewport 100 pixels north of latitude
+    );
+
+=head2 set()
+
+Use this method to add or change any of the map options after you have created
+the object.
+
+    # Create our object, using the default 640 x 480 image size
+    my $gmap = WebService::GoogleMaps->new();
+    
+    # Adjust lat/lon/zoom/cache and the LWP user agent string when requesting map data
+    $gmap->set(
+        latitude   => 40.750275,
+        longitude  => -73.993034,
+        zoom_level => 9,
+        agent      => "Mozilla/5.0 (compatible; Konqueror/3.0; i686 Linux; 20020208)",
+    );
+
+=head2 get()
+
+Use this method to retrieve the value of any of the current options
+
+    # Find out what the current zoom level is set to
+    my $zoom_level = $gmap->get("zoom_level");
+
+=head2 error()
+
+Use this to retrieve any errors generated by this module.
+
+=head2 generate_gd()
+
+This performs the retrieval of the image from Google Maps.  If the images
+are not found in the cache, (assuming you have specified a directory to
+use for the cache), this may take a little extra time to complete.
+
+It will return a GD object, which you may then use as you please.  It is
+useful to save it to a file.
+
+If there is a problem creating the image, an error message will be set.
+You may retrieve this error message at $gmap->error()
+
+    # create a GD object containing our bitmapped map object
+    my $gd = $gmap->generate_gd();
+
+    if ( $gmap->error() ) {
+        print "Error: ".$gmap->error()."\n";
+    }
+    else {
+        open (FH, ">", "mymap.png");
+        binmode FH;
+        print FH $gd->png;
+        close(FH);
+    }
 
 
-=head1 FUNCTIONS
+=head2 generate_html()
 
-=head2 new
+Not available in this version.  The plan is to have this return HTML code that
+will reference images on the Google Maps server to render the map image.
 
-=head2 set
+=head1 TODO
 
-=head2 get
+=over 4
 
-=head2 generate_gd
+=item * Improve caching method.  Maybe use subdirectories to separate cached images into geographic areas?
 
-Returns a GD object.
+=item * Develop the generate_html method
 
-=head2 generate_html
-
-Not in this version.
+=back
 
 =head1 AUTHOR
 
-Karl Lohner, C<< <karllohner+googlemaps@gmail.com> >>
+Karl Lohner, E<lt>karllohner+googlemaps@gmail.comE<gt>
 
 =head1 BUGS
 
-Please report any bugs or feature requests to
-C<karllohner+googlemaps@gmail.com>
+Please report any bugs or feature requests to E<lt>karllohner+googlemaps@gmail.comE<gt>.
+
+Really, I would like to know how you are using this module and what you would like to see
+to make it better.
 
 =head1 ACKNOWLEDGEMENTS
 
@@ -322,10 +430,9 @@ Thanks to Joel Webber and his blog article at http://jgwebber.blogspot.com/2005/
 as well as to the many people who added comments there, particularly the anonymous comments that detailed
 the algorithm used to map latitude/longitude to specific tiles.
 
+=head1 COPYRIGHT AND LICENSE
 
-=head1 COPYRIGHT & LICENSE
-
-Copyright 2005 Karl Lohner, All Rights Reserved.
+Copyright 2005 by Karl Lohner, All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
