@@ -4,5 +4,7 @@ Revision history for WebService-GoogleMaps
         First version
 
 0.02    Mon Feb 14 2005
-        A little cleanup
+        A little cleanup of documentation
 
+0.03    Mon Feb 14 2005
+        Added proper prerequisites to makefile

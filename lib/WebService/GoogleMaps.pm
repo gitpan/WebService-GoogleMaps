@@ -4,7 +4,7 @@ package WebService::GoogleMaps;
 # a perl interface to google maps
 # Copyright (c) 2005 - Karl Lohner    <karllohner+googlemaps@gmail.com>
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use warnings;
 use strict;
@@ -257,7 +257,7 @@ WebService::GoogleMaps - Retrieves maps from Google Maps
 
 =head1 VERSION
 
-Version 0.02
+Version 0.03
 
 =cut
 
