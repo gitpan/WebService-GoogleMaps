@@ -20,3 +20,10 @@ Revision history for WebService-GoogleMaps
         
 0.06    Fri Feb 18 2005
         Minor changes to help tests pass
+
+0.07    Sun Feb 27 2005
+        Rewrote much of generate_gd() method
+        Added two experimental methods:
+        + center_viewport_on_coordinates() to center the viewport on a list of coordinates
+        + insert_latlon_marker_gd() to draw labeled pins on the map
+        
