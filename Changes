@@ -17,3 +17,6 @@ Revision history for WebService-GoogleMaps
 0.05    Fri Feb 18 2005
         Documentation changes
         Increased version requirement for GD
+        
+0.06    Fri Feb 18 2005
+        Minor changes to help tests pass
