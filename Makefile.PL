@@ -10,7 +10,7 @@ WriteMakefile(
     PL_FILES            => {},
     PREREQ_PM => {
         'Test::More' => 0,
-        'GD' => 0,
+        'GD' => '2.17',
         'LWP::UserAgent' => 0,
         'HTTP::Request' => 0,
         'POSIX' => 0,

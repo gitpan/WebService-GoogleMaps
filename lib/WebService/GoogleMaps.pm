@@ -4,7 +4,7 @@ package WebService::GoogleMaps;
 # a perl interface to google maps
 # Copyright (c) 2005 - Karl Lohner    <karllohner+googlemaps@gmail.com>
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 use warnings;
 use strict;
@@ -17,6 +17,8 @@ use POSIX qw/floor ceil/;
 use constant GOOGLEMAPS_TILE_URL => 'http://mt.google.com/mt?v=%s&x=%d&y=%d&zoom=%d';
 use constant GOOGLEMAPS_TILE_RES_X => 128;
 use constant GOOGLEMAPS_TILE_RES_Y => 128;
+use constant GOOGLEMAPS_TILE_WATER_URL => 'http://www.google.com/mapfiles/water.gif';
+use constant GOOGLEMAPS_TILE_TRANSPARENT_URL => 'http://www.google.com/mapfiles/transparent.gif';
 
 sub new {
     my $class = shift;
@@ -291,10 +293,10 @@ WebService::GoogleMaps - Automated interface to Google Maps
     $gmap->set(
         latitude   => 40.750275,
         longitude  => -73.993034,
-        zoom_level => 4,          # valid values are 0..13, lower value is more zoomed
+        zoom_level => 4,          # valid values are 0..14, lower value is more zoomed
         cache_dir  => "/tmp",     # optional, but recommended!  Helps speed up future requests
-        pan_x      => 0,          # adjust center pixel of viewport east  (+) or west  (-)
-        pan_y      => 0,          # adjust center pixel of viewport north (+) or south (-)
+        pan_x      => 0,          # move viewport to the east  (+) or west  (-) a number of pixels
+        pan_y      => 0,          # move viewport to the south (+) or north (-) a number of pixels
     );
 
     # create a GD object containing our bitmapped map object
@@ -340,9 +342,10 @@ list of initial options and values.
         latitude   => 40.750275,
         longitude  => -73.993034,
         zoom_level => 3,
+        agent      => "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)",  # optional, default is a Firefox agent.
         cache_dir  => "/tmp",     # optional, but helps speed up future requests
-        pan_x      => 100,        # adjust center pixel of viewport 100 pixels east of longitude
-        pan_y      => 100,        # adjust center pixel of viewport 100 pixels north of latitude
+        pan_x      => 100,        # move viewport 100 pixels east
+        pan_y      => 100,        # move viewport 100 pixels south
     );
 
 =head2 set()
@@ -353,12 +356,14 @@ the object.
     # Create our object, using the default 640 x 480 image size
     my $gmap = WebService::GoogleMaps->new();
     
-    # Adjust lat/lon/zoom/cache and the LWP user agent string when requesting map data
+    # Set width, height, latitude, longitude, zoom level and cache directory when requesting map data
     $gmap->set(
+        width      => 800,
+        height     => 600,
         latitude   => 40.750275,
         longitude  => -73.993034,
         zoom_level => 9,
-        agent      => "Mozilla/5.0 (compatible; Konqueror/3.0; i686 Linux; 20020208)",
+        cache_dir  => "/tmp",
     );
 
 =head2 get()
@@ -408,6 +413,8 @@ will reference images on the Google Maps server to render the map image.
 =over 4
 
 =item * Improve caching method.  Maybe use subdirectories to separate cached images into geographic areas?
+
+=item * Put a water tile in places ourside the available data ranges?
 
 =item * Develop the generate_html method
 
