@@ -1,24 +1,62 @@
-WebService-GoogleMaps
+NAME
+    WebService::GoogleMaps - Retrieves maps from Google Maps
 
-Retrieves map images from http://maps.google.com/
+VERSION
+    Version 0.02
 
-Requires the GD module.  Tested under Windows.
+SYNOPSIS
+        use WebService::GoogleMaps;
 
-INSTALLATION
+        my $gmap = WebService::GoogleMaps->new( 640, 480 );
 
-To install this module, run the following commands:
+        $gmap->set(
+            latitude   => 40.750275,
+            longitude  => -73.993034,
+            zoom_level => 4,          # valid values are 0..12, lower value is more zoomed
+            cache_dir  => "/tmp",     # optional, but helps speed up future requests
+            pan_x      => 0,          # experimental this version
+            pan_y      => 0,          # experimental this version
+        );
+        my $gd = $gmap->generate_gd();
 
-    perl Makefile.PL
-    make
-    make test
-    make install
+        # or simply
 
+        # my $gd2 = $gmap->generate_gd(40.43305, -74.49757, 4);  # latitude, longitude, zoom_level
 
-COPYRIGHT AND LICENCE
+        $gmap->{error} && print "Error: $gmap->{error}\n";
+    
+        open (FH, ">", "msg.png");
+        binmode FH;
+        print FH $gd->png;
+        close(FH);
 
-Put the correct copyright and licence information here.
+FUNCTIONS
+  new
+  set
+  get
+  generate_gd
+    Returns a GD object.
 
-Copyright (C) 2005 Karl Lohner
+  generate_html
+    Not in this version.
 
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself.
+AUTHOR
+    Karl Lohner, "<karllohner+googlemaps@gmail.com>"
+
+BUGS
+    Please report any bugs or feature requests to
+    "karllohner+googlemaps@gmail.com"
+
+ACKNOWLEDGEMENTS
+    Thanks to Joel Webber and his blog article at
+    http://jgwebber.blogspot.com/2005/02/mapping-google.html as well as to
+    the many people who added comments there, particularly the anonymous
+    comments that detailed the algorithm used to map latitude/longitude to
+    specific tiles.
+
+COPYRIGHT & LICENSE
+    Copyright 2005 Karl Lohner, All Rights Reserved.
+
+    This program is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself.
+
